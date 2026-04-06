@@ -3,8 +3,8 @@ import GenomicFeatures.eachoverlap
 
 """
 Convenience struct that holds the BAM filename, a reader for the file,
-and the current record of the reader. Also includes access to convenience
-functions `get!()`, `next!()`, and `getValidBX`.
+and the current record of the reader (if reading record-by-record).
+Also includes access to convenience functions `fetch()`, `next!()`, and `getValidBX()`.
 """
 mutable struct BamReader
     file::String
@@ -14,11 +14,10 @@ mutable struct BamReader
     BamReader(infile) = new(infile, open(BAM.Reader, infile, index = infile * ".bai"), BAM.Record())
 end
 
-#TODO consider making an iterator for the eachoverlap result 
 
 """
-Mutating reader of a bamObj that will overwrite the existing `.record` field
-with the next record in the BAM reader.
+Mutating reader of the BAM file in a `BamReader` that will overwrite
+the existing `.record` field with the next record in the BAM reader.
 """
 function next!(bamObj::BamReader)
     empty!(bamObj.record)
@@ -29,7 +28,7 @@ function next!(bamObj::BamReader)
 end
 
 """
-Wraps `GenomicFeatures.eachoverlap` for a BamReader object,
+Wraps `GenomicFeatures.eachoverlap` for a `BamReader` object,
 returning a iterator of `BAM.record` over the requested interval.
 """
 function fetch(bamObj::BamReader, chrom::String, pos::UnitRange{T} where T<:Core.Real)::XAM.BAM.OverlapIterator{IOStream}
@@ -37,8 +36,9 @@ function fetch(bamObj::BamReader, chrom::String, pos::UnitRange{T} where T<:Core
 end
 
 """
-Return the BX barcode of the current read if it has a BX tag and valid VX tag,
-otherwise return `nothing`.
+Return the BX barcode of a `BAM.Record` if it has a BX tag and valid VX tag,
+otherwise return `nothing`. Will still return `nothing` if there is a BX tag
+without a VX tag.
 """
 function getValidBX(rec::BAM.Record)::Union{String, Nothing}
     if haskey(rec, "VX")
