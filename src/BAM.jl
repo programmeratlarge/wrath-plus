@@ -11,19 +11,18 @@ mutable struct BamReader
     file::String
     reader::XAM.BAM.Reader{IOStream}
     record::BAM.Record
-    contigs::Dict{String,Int}
+    contigs::Dict{String,StepRange{Int64, Int64}}
 end
 
-function BamReader(infile::String)
+function BamReader(infile::String, step::Int64)::BamReader
     rdr = open(BAM.Reader, infile, index = infile * ".bai")
-    d = Dict{String,Int}()
+    d = Dict{String,StepRange{Int64, Int64}}()
     for i in findall(header(rdr), "SQ")
-        d[i["SN"]] = parse(Int64, i["LN"]) 
+        ln = parse(Int64, i["LN"])
+        d[i["SN"]] = 1:step:ln
     end
     BamReader(infile, rdr, BAM.Record(), d)
 end
-
-# range(start=0, step=0.01, length=2^10)
 
 """
 Mutating reader of the BAM file in a `BamReader` that will overwrite
@@ -67,3 +66,5 @@ function getValidBX(rec::BAM.Record)::Union{String, Nothing}
     end
     return nothing
 end
+
+
