@@ -1,19 +1,29 @@
 using XAM
 import GenomicFeatures.eachoverlap
+import BioGenerics.header
 
 """
 Convenience struct that holds the BAM filename, a reader for the file,
 and the current record of the reader (if reading record-by-record).
-Also includes access to convenience functions `fetch()`, `next!()`, and `getValidBX()`.
+Also includes access to convenience functions `close!()` `fetch()`, `next!()`, and `getValidBX()`.
 """
 mutable struct BamReader
     file::String
     reader::XAM.BAM.Reader{IOStream}
     record::BAM.Record
-
-    BamReader(infile) = new(infile, open(BAM.Reader, infile, index = infile * ".bai"), BAM.Record())
+    contigs::Dict{String,Int}
 end
 
+function BamReader(infile::String)
+    rdr = open(BAM.Reader, infile, index = infile * ".bai")
+    d = Dict{String,Int}()
+    for i in findall(header(rdr), "SQ")
+        d[i["SN"]] = parse(Int64, i["LN"]) 
+    end
+    BamReader(infile, rdr, BAM.Record(), d)
+end
+
+# range(start=0, step=0.01, length=2^10)
 
 """
 Mutating reader of the BAM file in a `BamReader` that will overwrite
@@ -28,11 +38,18 @@ function next!(bamObj::BamReader)
 end
 
 """
+Close the underlying BAM.Reader
+"""
+function close!(bamObj::BamReader)
+    close(bamObj.reader)
+end
+
+"""
 Wraps `GenomicFeatures.eachoverlap` for a `BamReader` object,
 returning a iterator of `BAM.record` over the requested interval.
 """
 function fetch(bamObj::BamReader, chrom::String, pos::UnitRange{T} where T<:Core.Real)::XAM.BAM.OverlapIterator{IOStream}
-    return GenomicFeatures.eachoverlap(bamObj.reader, chrom, pos)
+    return eachoverlap(bamObj.reader, chrom, pos)
 end
 
 """
