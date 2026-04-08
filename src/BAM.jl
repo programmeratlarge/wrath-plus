@@ -66,5 +66,3 @@ function getValidBX(rec::BAM.Record)::Union{String, Nothing}
     end
     return nothing
 end
-
-
