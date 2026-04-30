@@ -11,8 +11,8 @@ function jaccardIdent(x::Set{String}, y::Set{String})::Float64
 end
 
 """
-Return a generator traversing an upper triangle. Returns (i,j) indices,
-intended to be used as:
+Return a generator traversing an upper triangle, omitting the diagonal.
+Returns (i,j) indices, intended to be used as:
 ```
 for (i,j) in uppertriangle(mat)
         ...
@@ -20,6 +20,12 @@ for (i,j) in uppertriangle(mat)
 ```
 """
 uppertriangle(A) = ((i, j) for j in axes(A, 2) for i in 1:j-1)
+
+"""
+Given a column index `col` to start, creates a generator
+that traverses the diagonal of Matrix `A`
+"""
+diagonal(A, col::Int) = (A[i,col+i] for i in 1:size(A,1)-1)
 
 # NOTE: pre-allocate a Set() with an estimated state
 #s = Set{String}()
@@ -31,18 +37,11 @@ e.g. (; xs, ys, qbottom, qtop, z) = jaccardScores(data)
  =#
 """
 Using the Jaccard identity matrix (intersect/union) as input,
-calculate the Z-scores and confidence intervals. Returns a `NamedTuple`
-(:xs, :ys, :qbottom, :qtop, :zscore), each a `Vector{Int64}`. The output is
-in a Tables-compliant format, suitable for downstream plotting.
+calculate the Z-scores. Returns a Z score matrix.
 """
-function jaccardScores(mat::Matrix{Float64}; alpha::Float64=0.95, zscore::Union{Int64, Float64})::NamedTuple
+function jaccardScores(mat::Matrix{Float32})::Matrix{Float64}
     n = size(mat, 1)
-    N = n * (n - 1) ÷ 2
-
-    ys = Vector{Float64}(undef, N)
-    xs = Vector{Float64}(undef, N)
-    z_scores = Vector{Float64}(undef, N)
-
+    z_scores = similar(mat, axes(mat))
     @inbounds for diag in 1:(n-1)
         diag_len = n - diag
         μ = 0.0
@@ -58,14 +57,25 @@ function jaccardScores(mat::Matrix{Float64}; alpha::Float64=0.95, zscore::Union{
         σ = sqrt(σ² / (diag_len - 1))
 
         for j in (diag+1):n
-            k = (diag - 1) * n - diag * (diag - 1) ÷ 2 + (j - diag)
-            val = Float64(mat[j-diag, j])
-            ys[k] = val
-            xs[k] = Float64(diag)
-            z_scores[k] = σ == 0 ? 0.0 : (val - μ) / σ
+            z_scores[j-diag, j] = σ == 0 ? 0.0 : (val - μ) / σ
         end
     end
-    return (xs=xs, ys=ys, z_scores=z_scores)
+    return z_scores
+end
+
+# Much less code, about the same speed, significantly more allocations
+function jaccardScores2(mat::Matrix{Float32})::Matrix{Float64}
+    z_scores = similar(mat, axes(mat))
+    @inbounds for col in 1:(size(mat, 1)-1)
+        idx = diagind(mat, col)
+        diag = @view mat[idx]
+        μ = mean(diag)
+        σ = stdm(diag, μ)
+        for i in idx
+            z_scores[i] = σ == 0 ? 0.0 : (mat[i] - μ) / σ
+        end
+    end
+    return z_scores
 end
 
 """
