@@ -123,7 +123,7 @@ function predictionBands(
     a, b, c = params[1], params[2], params[3]
     α = 1.0 - level
 
-    # --- Single pass: accumulate JᵀJ, RSS, and ŷ together ----------------
+    # First pass: accumulate JᵀJ, RSS, and ŷ together
     JtJ = @MMatrix zeros(3, 3)   # heap-allocated, but fast(er) mutable 3×3
     rss = 0.0
     ŷ = Vector{Float64}(undef, n)
@@ -134,7 +134,7 @@ function predictionBands(
         fi = exp(a + b * e)         # ŷᵢ
         ŷ[i] = fi
 
-        # Jacobian row as a stack-allocated SVector — zero heap allocation
+        # Jacobian row
         Ji = SVector{3,Float64}(fi, fi * e, fi * (-b * x * e))
 
         # Accumulate JᵀJ in-place: rank-1 update
@@ -154,7 +154,7 @@ function predictionBands(
     JtJ_inv = inv(SMatrix{3,3}(JtJ))   # static 3×3 inversion, no heap alloc
     t_crit = quantile(TDist(n - 3), 1.0 - α / 2.0)
 
-    # --- Second pass: compute per-point leverage and bands ----------------
+    # Second pass: compute per-point leverage and bands
     lower = Vector{Float64}(undef, n)
     upper = Vector{Float64}(undef, n)
 
@@ -164,8 +164,8 @@ function predictionBands(
         fi = ŷ[i]
         Ji = SVector{3,Float64}(fi, fi * e, fi * (-b * x * e))
 
-        # hᵢ = Jᵢᵀ (JᵀJ)⁻¹ Jᵢ  — stays entirely on the stack
-        v = JtJ_inv * Ji          # SVector * SMatrix → SVector, no alloc
+        # hᵢ = Jᵢᵀ (JᵀJ)⁻¹ Jᵢ
+        v = JtJ_inv * Ji
         hi = dot(Ji, v)
         half_w = t_crit * sqrt(mse * (1.0 + hi))
         lower[i] = fi - half_w
@@ -207,9 +207,10 @@ function predictionBands(xs::Vector{Float64}, ys::Vector{Float64}, params::Vecto
     α = 1.0 - level
     t_crit = quantile(TDist(n - p), 1.0 - α / 2.0)
 
-    lower = ŷ .- t_crit .* pred_std
-    upper = ŷ .+ t_crit .* pred_std
-
+    @inbounds begin
+        lower = ŷ .- t_crit .* pred_std
+        upper = ŷ .+ t_crit .* pred_std
+    end
     return (ŷ, lower, upper)
 end
 
